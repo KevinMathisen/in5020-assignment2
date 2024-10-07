@@ -1,0 +1,55 @@
+Spread 4.0.0  http://www.spread.org
+
+Spread Concepts LLC, Johns Hopkins University's Distributed Systems 
+and Networks Lab and George Washington University's Experimental 
+Networked Systems Lab are happy to announce the release of a 
+new stable version, 4.0.0, of the Spread toolkit. 
+
+The Spread 4 release is a major new release for the Spread project. This 
+release includes several highly requested new features that:
+
+1) Improve manageability by allowing dynamic configuration of sets 
+   of daemons without requiring a restart;
+2) Improve performance;
+3) Ease the development of Spread based applications with better 
+   membership reporting;
+4) Support multi-threaded forking client applications;
+5) Integrate a Virtual Synchrony interface;
+6) Provide simpler membership APIs;
+7) Organize and improve the software build for both Windows and 
+   Unix systems. 
+
+It also includes the usual collection of bug fixes. Details of the new 
+capabilities can be found in the TransitioningFromSpread_3.pdf document 
+included in the distribution and available on the website.
+
+This release does have some specific API changes, so some (not all)
+applications may need small source code changes in order to continue
+to work. Extensive documentation is available in the docs directory in
+the distributions.
+
+We believe this release is stable and provides a solid platform for
+Spread applications, however, because of the API changes it is not a
+drop in replacement for current applications.  So we highly encourage
+anyone working on new applications to use this release. Those
+currently running Spread applications should determine the best time
+for a switch to Spread 4.
+
+Spread is a toolkit that provides a high performance messaging service
+that is resilient to faults across external or internal
+networks. Spread functions as a unified message bus for distributed
+applications, and provides highly tuned application-level multicast
+and group communication support. Spread services range from reliable
+message passing to fully ordered messages with delivery guarantees,
+even in case of computer failures and network partitions.
+
+Please be aware, that under the Spread Open Source License, the toolkit may 
+be freely used only under some conditions. For example, the license includes 
+the requirement that all advertising materials (including web pages) 
+mentioning software that uses Spread display a specific acknowledgment. 
+Please review the license agreement for more details.
+http://www.spread.org/license/
+
+Other commercial licenses or other licensing arrangements are available. 
+Please contact info@spreadconcepts.com. 
+
