@@ -92,4 +92,63 @@ public class Client {
         }
     }
 
+    private double getQuickBalance() {
+        return balance;
+    }
+
+    private double getSyncedBalance() {
+        return balance;
+    }
+
+    private void deposit(double amount) {
+        balance += amount;
+    }
+
+    private void addInterest(double percent) {
+        balance += balance * (percent / 100.0);
+    }
+    
+    private List<Transaction> getHistory() {
+        // Return the list of executed transactions
+        return new ArrayList<>(executed_list);
+    }
+    
+    private String checkTxStatus(String transactionId) {
+        for (Transaction transaction : executed_list) {
+            if (transaction.uniqueId.equals(transactionId)) {
+                return "Not applied";
+            } else {
+                return "Applied";
+            }
+        }
+        return "Not Found";
+    }
+    
+    private void cleanHistory() {
+        executed_list.clear();
+    }
+    
+    private List<String> memberInfo() {
+        List<String> members = new ArrayList<>();
+        return members;
+    }
+    
+    private void sleep(int duration) {
+        try {
+            Thread.sleep(duration * 1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    private void exit() {
+        // Exit the client application
+        try {
+            spread_connection.disconnect();
+        } catch (SpreadException e) {
+            e.printStackTrace();
+        }
+        System.exit(0);
+    }
+
 }
