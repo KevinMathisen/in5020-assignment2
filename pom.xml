@@ -15,10 +15,11 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.example</groupId>
+            <groupId>com.spread</groupId>
             <artifactId>spread</artifactId>
             <version>1.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/spread.jar</systemPath>
         </dependency>
     </dependencies>
-
 </project>
