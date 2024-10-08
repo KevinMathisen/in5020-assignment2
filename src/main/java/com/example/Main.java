@@ -1,12 +1,13 @@
 package com.example;
 
-import spread.*;
-
-import javax.swing.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.net.http.WebSocket;
 import java.util.Random;
+
+import spread.SpreadConnection;
+import spread.SpreadException;
+import spread.SpreadGroup;
+import spread.SpreadMessage;
 
 
 public class Main {
@@ -41,7 +42,7 @@ public class Main {
         }
 
 
-        //System.out.println("Hello world!");
+        System.out.println("Hello world!");
         Thread.sleep(100000000);
     }
 

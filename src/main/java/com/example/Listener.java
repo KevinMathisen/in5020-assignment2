@@ -10,12 +10,12 @@ public class Listener implements AdvancedMessageListener {
         } catch (SpreadException e) {
             throw new RuntimeException(e);
         }
-        System.out.println(msg);
+        System.out.println("New incomming message: " + msg);
     }
 
     @Override
     public void membershipMessageReceived(SpreadMessage spreadMessage) {
-        System.out.println(spreadMessage.getMembershipInfo().getMembers());
+        System.out.println("New membership change: " + spreadMessage.getMembershipInfo().getMembers());
     }
 
 }
