@@ -1,5 +1,6 @@
 package com.example;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -62,7 +63,7 @@ public class Client {
         sendMessage("Hello world! I am client : "+id);
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, IOException {
         String server_address = "127.0.0.1";
         String account_name = "Group10";
         String file_name = "";
@@ -74,6 +75,13 @@ public class Client {
 
         for (int i = 0; i < num_of_replica; i++) {
             clients[i] = new Client(rand.nextInt(), server_address, account_name, file_name);
+        }
+
+        if (file_name.isEmpty()) {
+            clients[0].handleUserCommands();  // Interactive midlertidig kun for en client, fix multithreading
+        } else {
+            BatchProcessor batchProcessor = new BatchProcessor(clients);
+            batchProcessor.processBatchFile(file_name);  // Batch processing
         }
 
         System.out.println("Hello world!");
@@ -92,7 +100,7 @@ public class Client {
         }
     }
 
-    private double getQuickBalance() {
+    double getQuickBalance() {
         return balance;
     }
 
@@ -100,7 +108,7 @@ public class Client {
         return balance;
     }
 
-    private void deposit(double amount) {
+    public void deposit(double amount) {
         balance += amount;
     }
 
@@ -141,7 +149,7 @@ public class Client {
         }
     }
     
-    private void exit() {
+    public void exit() {
         // Exit the client application
         try {
             spread_connection.disconnect();
@@ -149,6 +157,14 @@ public class Client {
             e.printStackTrace();
         }
         System.exit(0);
+    }
+
+    public int getId() {
+        return this.id;
+    }
+
+    private void handleUserCommands() {
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
 }
