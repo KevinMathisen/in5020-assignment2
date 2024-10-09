@@ -1,11 +1,15 @@
 package com.example;
 
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import spread.SpreadConnection;
 import spread.SpreadException;
@@ -13,20 +17,21 @@ import spread.SpreadGroup;
 import spread.SpreadMessage;
 
 public class Client {
-    private double balance;
-    private int order_counter;
-    private int outstanding_counter;
-    private final List<Transaction> executed_list;
-    private final Collection<Transaction> outstanding_collection;
+    private double balance;                         // Balance of account
+    private int order_counter;                      // How many transactions executed
+    private int outstanding_counter;                // How many local transactions added to outstanding collection
+    private final List<Transaction> executed_list;  // Transactions exectuted
+    private final Collection<Transaction> outstanding_collection;   // Transactions to be broadcast
+    private final Collection<Transaction> received_collection;      // Transactions received which should be executed
 
-    private final String server_address;
-    private final String account_name;
-    private final String file_name;
-
-    private final SpreadConnection spread_connection;
-    private final Listener spread_listener;
-    private final SpreadGroup spread_group;
+    private final SpreadConnection spread_connection;   // Used to connect to spread server
+    private final Listener spread_listener;             // Used to receive messages
+    private final SpreadGroup spread_group;             // Group for account
     private final int id;
+
+    private SpreadGroup[] members;                  // TODO: implement updated members list
+
+    private final ScheduledExecutorService schedulerBroadcast = Executors.newScheduledThreadPool(1);
 
     public Client(int id, String server_address, String account_name, String file_name) throws InterruptedException {
         // Initialize to 0 and empty lists
@@ -35,15 +40,11 @@ public class Client {
         this.outstanding_counter = 0;
         this.executed_list = new ArrayList<>();
         this.outstanding_collection = new ArrayList<>();
-
-        // Set arguments from command line
-        this.server_address = server_address;
-        this.account_name = account_name;
-        this.file_name = file_name;
+        this.received_collection = new ArrayList<>();
 
         // Initialize connection and spead listener
         this.spread_connection = new SpreadConnection();
-        this.spread_listener = new Listener();
+        this.spread_listener = new Listener(this);
         this.id = id;
 
         // Connect to spread server, connect the listener, and join the spread group
@@ -52,14 +53,17 @@ public class Client {
             spread_connection.connect(InetAddress.getByName(server_address), 4803, String.valueOf(id), false, true);
 
             this.spread_group = new SpreadGroup();
-            this.spread_group.join(spread_connection, "group");
+            this.spread_group.join(spread_connection, account_name);
         } catch (SpreadException e) {
             throw new RuntimeException(e);
         } catch (UnknownHostException e) {
             throw new RuntimeException(e);
         }
 
-        sendMessage("Hello world! I am client : "+id);
+        // Start broadcasting outstanding_collection every 10 seconds
+        broadcastOutstanding();
+
+        // TODO: Start processing commands (either from file_name, or from commandline)
     }
 
     public static void main(String[] args) throws InterruptedException {
@@ -68,27 +72,107 @@ public class Client {
         String file_name = "";
         int num_of_replica = 1;
 
-        Client[] clients = new Client[num_of_replica];
-
         Random rand = new Random();
+        Client client = new Client(rand.nextInt(), server_address, account_name, file_name);
 
-        for (int i = 0; i < num_of_replica; i++) {
-            clients[i] = new Client(rand.nextInt(), server_address, account_name, file_name);
-        }
+        // Wait for all other clients to join before starting client
+        // Check if members are the same as num_of_replica
 
         System.out.println("Hello world!");
         Thread.sleep(100000000);
     }
 
-    private void sendMessage(String message_content) throws InterruptedException {
+    private void processCommand(String command) throws Exception {
+        command = command.trim();
+
+        if (command.startsWith("deposit") || command.startsWith("addInterest") || command.startsWith("getSynchedBalance")) {
+            if (command.split(" ").length != 2) {
+                System.out.println("Invalid argument for command");
+                return;
+            }
+            Transaction tx = new Transaction();
+            tx.command = command;
+            tx.uniqueId = id + " " + outstanding_counter++;
+            synchronized (outstanding_collection) {
+                outstanding_collection.add(tx);
+            }
+            return;
+        } else if (command.startsWith("checkTxStatus")) {
+            if (command.split(" ").length != 2) {
+                System.out.println("Invalid argument for command");
+                return;
+            }
+            String[] command_parts = command.split(" ");
+            if (command_parts.length == 2) {
+                checkTxStatus(command_parts[1]);
+            }
+            return;
+        } else if (command.startsWith("sleep")) {
+            if (command.split(" ").length != 2) {
+                System.out.println("Invalid argument for command");
+                return;
+            }
+            String[] command_parts = command.split(" ");
+            if (command_parts.length == 2) {
+                sleep(Integer.parseInt(command_parts[1]));
+            }
+            return;
+        }
+
+        switch (command) {
+            case "getQuickBalance" -> getQuickBalance();
+            case "getHistory" -> getHistory();
+            case "cleanHistory" -> cleanHistory();
+            case "memberInfo" -> memberInfo();
+            case "exit" -> exit();
+            default -> System.out.println("Invalid command");
+        }
+
+    }
+
+    private void broadcastOutstanding() {
+        // calls sendOutstanding every 10 seconds
+        schedulerBroadcast.scheduleAtFixedRate(() -> {
+            try {
+                sendOutstanding(); 
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, 10, 10, TimeUnit.SECONDS);
+    }
+
+    private void sendOutstanding() throws InterruptedException {
         try {
             SpreadMessage message = new SpreadMessage();
             message.addGroup(spread_group);
             message.setFifo();
-            message.setObject(message_content);
+            message.setObject((Serializable) outstanding_collection);
             spread_connection.multicast(message);
         } catch (SpreadException e) {
             e.printStackTrace();
+        }
+    }
+
+    public void processReceivedTransactions(Collection<Transaction> receivedTransactions) {
+        synchronized (this) {
+            // Iterate over all transactions received
+            for (Transaction tx : receivedTransactions) {
+
+                // Check if the transaction has already been executed 
+                boolean tx_already_executed = false;
+                for (Transaction executedTx : executed_list) {
+                    if (executedTx.uniqueId.equals(tx.uniqueId)) {
+                        tx_already_executed = false;
+                    }
+                }
+
+                // If the transaction was local, remove it from the local list
+                outstanding_collection.removeIf(localTx -> localTx.uniqueId.equals(tx.uniqueId));
+
+                if (!tx_already_executed) {
+                    receivedTransactions.add(tx);
+                }
+            }
         }
     }
 

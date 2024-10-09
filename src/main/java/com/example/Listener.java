@@ -1,16 +1,23 @@
 package com.example;
 
+import java.util.Collection;
+
 import spread.*;
 
 public class Listener implements AdvancedMessageListener {
+    private final Client client;
+
+    public Listener(Client client) {
+        this.client = client;
+    }
+    
     public void regularMessageReceived(SpreadMessage message) {
-        String msg = null;
+        Collection<Transaction> transactions = null;
         try {
-            msg = (String) message.getObject();
-        } catch (SpreadException e) {
+            client.processReceivedTransactions((Collection<Transaction>) message.getObject());
+        } catch (SpreadException | ClassCastException e) {
             throw new RuntimeException(e);
         }
-        System.out.println("New incomming message: " + msg);
     }
 
     @Override
