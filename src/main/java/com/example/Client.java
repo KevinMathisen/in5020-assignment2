@@ -176,20 +176,54 @@ public class Client {
                 for (Transaction executedTx : executed_list) {
                     if (executedTx.uniqueId.equals(tx.uniqueId)) {
                         tx_already_executed = false;
+                        break;
                     }
                 }
 
                 // If the transaction was local, remove it from the local list
                 outstanding_collection.removeIf(localTx -> localTx.uniqueId.equals(tx.uniqueId));
 
-                // Execute the transaction if it has not been already
-                if (!tx_already_executed) {
-                    // Execute transaction
-                    // Need to handle getSyncedBalance and setBalance
-                    // Count it
-                    order_counter++;
-                    executed_list.add(tx);
+                // If transaction has already been executed, skip it
+                if (tx_already_executed) continue;
+
+                // If command is getSyncedBalance, print out the balance if the command was meant for this client
+                if (tx.command.equals("getSyncedBalance")) {
+                    if (Integer.parseInt(tx.uniqueId.split(" ")[0]) == id) {
+                        System.out.println("Correct Synced Balance: " + balance);
+                    }
+                    continue;
                 }
+
+                // Check if command has correct format (<command> <value>)
+                String[] commandParts;
+                try {
+                   commandParts = tx.command.split(" "); 
+                } catch (Exception e) {
+                    continue;
+                }
+
+                // Check if setBalance
+                if (commandParts[0].equals("setBalance")) {
+                    // TODO: handle what happens if setbalance
+                    continue;
+                }
+
+                // Execute commands by using their method, skip transaction if it is not deposit or addInterest
+                switch (commandParts[0]) {
+                    case "deposit" -> deposit(Double.parseDouble(commandParts[1]));
+                    case "addInterest" -> addInterest(Double.parseDouble(commandParts[1]));
+                    default -> {
+                        continue;
+                    }
+                }
+
+                // Count transaction and save it to history
+                order_counter++;
+                executed_list.add(tx);
+            }
+
+            synchronized (outstanding_collection) {
+                if (outstanding_collection.isEmpty()) outstanding_collection.notifyAll();
             }
         }
     }
@@ -205,13 +239,31 @@ public class Client {
     private void getSyncedBalanceNaive() {
         // wait in another thread for outstanding_collection to be empty
         //   then print balance
-        
-        System.out.println("Naive Synced balance: " + balance);
+        new Thread(() -> {
+            synchronized (outstanding_collection) {
+                while (!outstanding_collection.isEmpty()) {
+                    try {
+                        outstanding_collection.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                System.out.println("Naive Synced balance: " + balance);
+            }
+        }).start();
     }
 
     private void getSyncedBalanceCorrect() {
         // create a transaction 
-    }
+        Transaction tx = new Transaction();
+        tx.command = "getSyncedBalance";
+        tx.uniqueId = id + " " + outstanding_counter++;
+        
+        // Add the transaction to outstanding collection to be broadcast
+        synchronized (outstanding_collection) {
+            outstanding_collection.add(tx);
+        }
+}
 
     private void deposit(double amount) {
         balance += amount;
