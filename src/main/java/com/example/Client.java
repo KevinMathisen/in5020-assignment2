@@ -26,11 +26,13 @@ public class Client {
     private final SpreadConnection spread_connection;   // Used to connect to spread server
     private final Listener spread_listener;             // Used to receive messages
     private final SpreadGroup spread_group;             // Group for account
+
     private final int id;
+    private boolean client_syncronising;            // If the client is currently syncronising
 
     private final String file_name;
     private final boolean naive_sync_balance;
-    private SpreadGroup[] members;                  // TODO: implement updated members list
+    public SpreadGroup[] members;                  // TODO: implement updated members list
 
     private final ScheduledExecutorService schedulerBroadcast = Executors.newScheduledThreadPool(1);
 
@@ -45,7 +47,9 @@ public class Client {
         // Initialize connection and spead listener
         this.spread_connection = new SpreadConnection();
         this.spread_listener = new Listener(this);
+
         this.id = id;
+        this.client_syncronising = false;   
 
         this.file_name = file_name;
         this.naive_sync_balance = naive_sync_balance;
@@ -78,7 +82,15 @@ public class Client {
         System.out.println("Created client with ID " + client_id + ", waiting for " + num_of_replica + " other clients to join group");
         
         // Wait for all other clients to join before starting to process commands
-        //      Check if members are the same as num_of_replica
+        synchronized (client.members) {
+            while (client.members.length != num_of_replica) {
+                try {
+                    client.members.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
 
         System.out.println("All members joined group, starting to synch and process commands");
 
@@ -144,7 +156,8 @@ public class Client {
         // calls sendOutstanding every 10 seconds
         schedulerBroadcast.scheduleAtFixedRate(() -> {
             try {
-                sendOutstanding(); 
+                // Only send outstanding if mode is not syncing
+                if (!client_syncronising) sendOutstanding(); 
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -204,7 +217,7 @@ public class Client {
 
                 // Check if setBalance
                 if (commandParts[0].equals("setBalance")) {
-                    // TODO: handle what happens if setbalance
+                    handleSetBalance(Double.parseDouble(commandParts[1]));
                     continue;
                 }
 
@@ -228,8 +241,37 @@ public class Client {
         }
     }
 
-    private void handleMemberShipChange(SpreadGroup[] members) {
+    public void handleMemberShipChange(SpreadGroup[] members) {
+        // If a member leaves the exection, update member list but otherwise ignore it.
 
+        // If a member joins, update member list, 
+        //   and if members same as num_of_replicas, signal to main that the program can start to execute the commands
+
+        // If we get a new member after starting the execution, we need to handle the new member
+        // 
+        // This should be done by changing mode to syncing, pausing outstanding messages (and the incomming commands)
+        //          the program should let the user know that it is syncing the new member
+        //      in sync mode, the program should send a setBalance transaction to all members
+        //      and wait for receiving all setBalance from all members-1 (not the new member)
+        //          if any of these differ, we print out a message to the user that the servers are not synced, and exit the program
+        //      If everything ok,  we can resume execution and broadcasting
+    }
+
+    private void handleSetBalance(double balance) {
+        // TODO: handle what happens if setbalance
+
+        // If the balance is 0.0, we know that we are the new member. Then, we can also set our status to syncing, to prevent us from running.
+        //  we also will simply set our balance to be the incomming balance then.
+
+        // Else, this client is either an existing member, or the new member in sync mode. In both cases we should now be in sync mode. 
+        //      If the client is not in sync mode, e.g. has not recieved new member message, there is inconsistency, and the program should let user know and exit
+
+        // if we are in sync mode, we can check if incomming and local balance is the same
+        //    if not, there is inconsistency, and the program should let user know and exit
+
+        // If after handling the setBalance transaction, either if balance was set to a new value, or it was checked if correct,
+        //   we should increment how many times we have received a setBalance
+        //      if this is equal to members size - 1, we have received all setBalance, and should continue executing by setting sync mode to false
     }
 
     private void getQuickBalance() {
@@ -309,7 +351,7 @@ public class Client {
     }
     
     private void sleep(int duration) {
-        // If this is called while file_name is not defined (i.e user is inputing commands) no sleep should happen
+        // If this is called while file_name is not defined (i.e user is inputing commands) no sleep will happen
         if (file_name.isEmpty()) {
             return;
         }

@@ -22,8 +22,10 @@ public class Listener implements AdvancedMessageListener {
 
     @Override
     public void membershipMessageReceived(SpreadMessage spreadMessage) {
-        // Todo: Send updated member list and notification to client
-        System.out.println("New membership change: " + spreadMessage.getMembershipInfo().getMembers());
+        // Send updated member list and notification to client
+        SpreadGroup[] members = spreadMessage.getMembershipInfo().getMembers();
+        System.out.println("New membership change: " + members);
+        client.handleMemberShipChange(members);
     }
 
 }
