@@ -29,11 +29,12 @@ public class Client {
     private final int id;
 
     private final String file_name;
+    private final boolean naive_sync_balance;
     private SpreadGroup[] members;                  // TODO: implement updated members list
 
     private final ScheduledExecutorService schedulerBroadcast = Executors.newScheduledThreadPool(1);
 
-    public Client(int id, String server_address, String account_name, String file_name, int num_of_replica) throws InterruptedException {
+    public Client(int id, String server_address, String account_name, String file_name, int num_of_replica, boolean naive_sync_balance) throws InterruptedException {
         // Initialize to 0 and empty lists
         this.balance = 0.0;
         this.order_counter = 0;
@@ -47,6 +48,7 @@ public class Client {
         this.id = id;
 
         this.file_name = file_name;
+        this.naive_sync_balance = naive_sync_balance;
 
         // Connect to spread server, connect the listener, and join the spread group
         try {
@@ -80,9 +82,10 @@ public class Client {
         String account_name = "Group10";
         String file_name = "";
         int num_of_replica = 1;
+        boolean naive_sync_balance = false;
 
         Random rand = new Random();
-        Client client = new Client(rand.nextInt(), server_address, account_name, file_name, num_of_replica);
+        Client client = new Client(rand.nextInt(), server_address, account_name, file_name, num_of_replica, naive_sync_balance);
 
         Thread.sleep(100000000);
     }
@@ -90,44 +93,42 @@ public class Client {
     private void processCommand(String command) throws Exception {
         command = command.trim();
 
-        // TODO: own if statment checking if command should have two arguments
+        // Check if command should have an argument
+        if (command.startsWith("deposit") || command.startsWith("addInterest") || command.startsWith("checkTxStatus") || command.startsWith("sleep")) {
+            if (command.split(" ").length != 2 ) {
+                System.out.println("Invalid argument for command, should follow syntax '<command_name> <value>'");
+                return;
+            }
 
-        // TODO: move getSyncedBalance to own if else
-        //          and implement if check to see if we should use naive or correct approach
-        if (command.startsWith("deposit") || command.startsWith("addInterest") || command.startsWith("getSynchedBalance")) {
-            if (command.split(" ").length != 2) {
-                System.out.println("Invalid argument for command");
-                return;
+            // Handle deposit and addInterest commands by creating transactions
+            if (command.startsWith("deposit") || command.startsWith("addInterest")) {
+                Transaction tx = new Transaction();
+                tx.command = command;
+                tx.uniqueId = id + " " + outstanding_counter++;
+                
+                // Add the transaction to outstanding collection to be broadcast
+                synchronized (outstanding_collection) {
+                    outstanding_collection.add(tx);
+                }
+
+            // Handle txstatus and sleep by calling their methods
+            } else if (command.startsWith("checkTxStatus")) {
+                printTxStatus(command.split(" ")[1]);
+
+            } else if (command.startsWith("sleep")) {
+                sleep(Integer.parseInt(command.split(" ")[1]));
             }
-            Transaction tx = new Transaction();
-            tx.command = command;
-            tx.uniqueId = id + " " + outstanding_counter++;
-            synchronized (outstanding_collection) {
-                outstanding_collection.add(tx);
-            }
-            return;
-        } else if (command.startsWith("checkTxStatus")) {
-            if (command.split(" ").length != 2) {
-                System.out.println("Invalid argument for command");
-                return;
-            }
-            String[] command_parts = command.split(" ");
-            if (command_parts.length == 2) {
-                printTxStatus(command_parts[1]);
-            }
-            return;
-        } else if (command.startsWith("sleep")) {
-            if (command.split(" ").length != 2) {
-                System.out.println("Invalid argument for command");
-                return;
-            }
-            String[] command_parts = command.split(" ");
-            if (command_parts.length == 2) {
-                sleep(Integer.parseInt(command_parts[1]));
-            }
+
             return;
         }
 
+        // Call naive or correct approach for getSyncBalance depending on which one set to use
+        if (command.startsWith("getSynchedBalance")) {
+            if (naive_sync_balance) getSyncedBalanceNaive();
+            else                    getSyncedBalanceCorrect();
+        }
+
+        // Simply call the methods of the other commands which require no arguments
         switch (command) {
             case "getQuickBalance" -> getQuickBalance();
             case "getHistory" -> getHistory();
