@@ -62,19 +62,6 @@ public class Client {
         } catch (UnknownHostException e) {
             throw new RuntimeException(e);
         }
-
-        System.out.println("Created client with ID " + id + ", waiting for " + num_of_replica + " other clients to join group");
-
-
-        // Wait for all other clients to join before starting client
-        // Check if members are the same as num_of_replica
-
-        // Start broadcasting outstanding_collection every 10 seconds
-        broadcastOutstanding();
-
-        System.out.println("All members joined group, starting to synch and process commands");
-
-        // TODO: Start processing commands (either from file_name, or from commandline)
     }
 
     public static void main(String[] args) throws InterruptedException {
@@ -85,7 +72,20 @@ public class Client {
         boolean naive_sync_balance = false;
 
         Random rand = new Random();
-        Client client = new Client(rand.nextInt(), server_address, account_name, file_name, num_of_replica, naive_sync_balance);
+        int client_id = rand.nextInt(Integer.MAX_VALUE)+1;
+        Client client = new Client(client_id, server_address, account_name, file_name, num_of_replica, naive_sync_balance);
+
+        System.out.println("Created client with ID " + client_id + ", waiting for " + num_of_replica + " other clients to join group");
+        
+        // Wait for all other clients to join before starting to process commands
+        //      Check if members are the same as num_of_replica
+
+        System.out.println("All members joined group, starting to synch and process commands");
+
+        // Start broadcasting outstanding_collection every 10 seconds
+        client.broadcastOutstanding();
+
+        // TODO: Start processing commands (either from file_name, or from commandline)
 
         Thread.sleep(100000000);
     }
