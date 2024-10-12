@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -28,9 +29,12 @@ public class Client {
     private final SpreadGroup spread_group;             // Group for account
 
     private final int id;                           // Unique ID of the client
-    private boolean client_syncronising;            // If the client is currently syncronising
+    public boolean start_mode;                  // If the client is starting up
+    public boolean sync_mode;                      // If the client is currently syncronising
+    private final CountDownLatch startClientLatch = new CountDownLatch(1);  
 
     private final String file_name;                 // File name to get commands from, empty '' when we read from command line
+    private final int num_of_replica;               // Number of replicas required to start processing
     private final boolean naive_sync_balance;       // If naive mode should be used when running the command getSyncedBalance
     public SpreadGroup[] members;                   // The current members in the group
 
@@ -47,7 +51,7 @@ public class Client {
      * @param naive_sync_balance    - If naive mode should be used when running the command getSyncedBalance 
      * @throws InterruptedException
      */
-    public Client(int id, String server_address, String account_name, String file_name, boolean naive_sync_balance) throws InterruptedException {
+    public Client(int id, String server_address, String account_name, String file_name, int num_of_replica, boolean naive_sync_balance) throws InterruptedException {
         // Initialize to 0 and empty lists
         this.balance = 0.0;
         this.order_counter = 0;
@@ -60,9 +64,11 @@ public class Client {
         this.spread_listener = new Listener(this);
 
         this.id = id;
-        this.client_syncronising = false;   // Start all clients in normal mode
+        this.start_mode = true;   // Client is starting
+        this.sync_mode = false;      // Client is not syncing at start
 
         this.file_name = file_name;
+        this.num_of_replica = num_of_replica;
         this.naive_sync_balance = naive_sync_balance;
 
         try {
@@ -98,20 +104,12 @@ public class Client {
         // Initialize client
         Random rand = new Random();
         int client_id = rand.nextInt(Integer.MAX_VALUE)+1;
-        Client client = new Client(client_id, server_address, account_name, file_name, naive_sync_balance);
+        Client client = new Client(client_id, server_address, account_name, file_name, num_of_replica, naive_sync_balance);
 
         System.out.println("Created client with ID " + client_id + ", waiting for " + num_of_replica + " other clients to join group");
         
         // Wait for all other clients to join before starting to process commands
-        synchronized (client.members) {
-            while (client.members.length != num_of_replica) {
-                try {
-                    client.members.wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
+        client.startClientLatch.await();
 
         System.out.println("All members joined group, starting to synch and process commands");
 
@@ -161,7 +159,7 @@ public class Client {
         }
 
         // Call naive or correct approach for getSyncBalance depending on which one set to use
-        if (command.startsWith("getSynchedBalance")) {
+        if (command.startsWith("getSyncedBalance")) {
             if (naive_sync_balance) getSyncedBalanceNaive();
             else                    getSyncedBalanceCorrect();
 
@@ -187,7 +185,7 @@ public class Client {
         // calls sendOutstanding every 10 seconds
         schedulerBroadcast.scheduleAtFixedRate(() -> {
             try {
-                // Only send outstanding if mode is not syncing
+                // TODO: Only send outstanding if mode is not syncing and not start
                 if (!client_syncronising) sendOutstanding(); 
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -231,6 +229,12 @@ public class Client {
      */
     public void processReceivedTransactions(Collection<Transaction> receivedTransactions) {
         synchronized (this) {
+            // TODO: handle reception of sync messages. call handleSyncBalance
+                 
+
+            // TODO: Handle reception of transactions when client is in sync mode
+            //         should throw away transactions, except if it came from same client, where we put them back in the outstanding_collection
+
             // Iterate over all transactions received
             for (Transaction tx : receivedTransactions) {
 
@@ -299,38 +303,26 @@ public class Client {
     public void handleMemberShipChange(SpreadGroup[] members) {
         // If a member leaves the exection, update member list but otherwise ignore it.
 
-        // If a member joins, update member list, 
-        //   and if members same as num_of_replicas, signal to main that the program can start to execute the commands
-
-        // If we get a new member after starting the execution, we need to handle the new member
-        // 
-        // This should be done by changing mode to syncing, pausing outstanding messages (and the incomming commands)
-        //          the program should let the user know that it is syncing the new member
-        //      in sync mode, the program should send a setBalance transaction to all members
-        //      and wait for receiving all setBalance from all members-1 (not the new member)
-        //          if any of these differ, we print out a message to the user that the servers are not synced, and exit the program
-        //      If everything ok,  we can resume execution and broadcasting
+        // If a member joins, update member list, call updateStartMode()
+        //
+        //  if we are not start_mode, assume that we need to sync with new client
+        //      set sync mode to true
+        //      and create and send new sync transaction, containing current balance and order_count (send as outstanding_collection for same format)
     }
 
     /**
      * 
      * @param balance
      */
-    private void handleSetBalance(double balance) {
-        // TODO: handle what happens if setbalance
+    private void handleSyncTx(Transaction tx) {
+        // TODO: handle what happens when received sync transaction
 
-        // If the balance is 0.0, we know that we are the new member. Then, we can also set our status to syncing, to prevent us from running.
-        //  we also will simply set our balance to be the incomming balance then.
-
-        // Else, this client is either an existing member, or the new member in sync mode. In both cases we should now be in sync mode. 
-        //      If the client is not in sync mode, e.g. has not recieved new member message, there is inconsistency, and the program should let user know and exit
-
-        // if we are in sync mode, we can check if incomming and local balance is the same
-        //    if not, there is inconsistency, and the program should let user know and exit
-
-        // If after handling the setBalance transaction, either if balance was set to a new value, or it was checked if correct,
-        //   we should increment how many times we have received a setBalance
-        //      if this is equal to members size - 1, we have received all setBalance, and should continue executing by setting sync mode to false
+        //             if we are in start_mode, update mode to sync upon reception
+        //                  and set current balance and order_counter
+        //
+        //              else, check if recevied balance is consistent. If not, exit
+        //
+        //          at end, check how many sync received. When enough (membersize-1): go out of sync mode     
     }
 
     /**
@@ -476,6 +468,19 @@ public class Client {
             e.printStackTrace();
         }
         System.exit(0);
+    }
+
+    /**
+     * Checks if enough members have joined to exit start mode, and if so signals this to main
+     */
+    public void updateStartMode() {
+        // Only exit start mode if same amount of replicas and expected
+        //      if too few: we need to wait for more to join, 
+        //      if too many: means we need to sync and therefore wait for sync message
+        if (start_mode && members.length == num_of_replica ) {
+            this.start_mode = false;
+            startClientLatch.countDown();
+        }
     }
 
 }
