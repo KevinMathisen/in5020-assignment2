@@ -31,6 +31,7 @@ public class Client {
     private final int id;                           // Unique ID of the client
     public boolean start_mode;                  // If the client is starting up
     public boolean sync_mode;                      // If the client is currently syncronising
+    private int received_sync;                      // Amount of received sync messages since last sync
     private final CountDownLatch startClientLatch = new CountDownLatch(1);  
 
     private final String file_name;                 // File name to get commands from, empty '' when we read from command line
@@ -66,6 +67,7 @@ public class Client {
         this.id = id;
         this.start_mode = true;   // Client is starting
         this.sync_mode = false;      // Client is not syncing at start
+        this.received_sync = 0;
 
         this.file_name = file_name;
         this.num_of_replica = num_of_replica;
@@ -185,8 +187,8 @@ public class Client {
         // calls sendOutstanding every 10 seconds
         schedulerBroadcast.scheduleAtFixedRate(() -> {
             try {
-                // TODO: Only send outstanding if mode is not syncing and not start
-                if (!client_syncronising) sendOutstanding(); 
+                // Only send outstanding if mode is not syncing and not start
+                if (!start_mode && !sync_mode) sendOutstanding(outstanding_collection); 
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -197,7 +199,7 @@ public class Client {
      * Sends outstanding_collection to the spread group
      * @throws InterruptedException
      */
-    private void sendOutstanding() throws InterruptedException {
+    private void sendOutstanding(Collection<Transaction> outstanding_collection) throws InterruptedException {
         try {
             // Create spread message, add it to our account, and make it follow FIFO to ensure consistent view
             SpreadMessage message = new SpreadMessage();
@@ -229,11 +231,15 @@ public class Client {
      */
     public void processReceivedTransactions(Collection<Transaction> receivedTransactions) {
         synchronized (this) {
-            // TODO: handle reception of sync messages. call handleSyncBalance
-                 
+            // Return if there are no transactions to process 
+            if (receivedTransactions.isEmpty()) return;
 
-            // TODO: Handle reception of transactions when client is in sync mode
-            //         should throw away transactions, except if it came from same client, where we put them back in the outstanding_collection
+            // Retrieve if we received sync transaction
+            boolean syncMessageReceived = receivedTransactions.iterator().next().command.startsWith("sync");                            
+
+            // If we are syncing, (or in start mode) we want to not handle any incomming transaction, except if they are for syncronizing. 
+            //   Because the transactions broadcasted from this client are not removed yet, we can feel safe knowing they will be broadcast again later:)
+            if ((sync_mode || start_mode) && !syncMessageReceived) return;
 
             // Iterate over all transactions received
             for (Transaction tx : receivedTransactions) {
@@ -269,9 +275,9 @@ public class Client {
                     continue;
                 }
 
-                // If setbalance command for syncronisation, send it to handleSetBalance(...)
-                if (commandParts[0].equals("setBalance")) {
-                    handleSetBalance(Double.parseDouble(commandParts[1]));
+                // call handleSyncBalance for syncronization transactions
+                if (commandParts[0].equals("sync")) {
+                    handleSyncTx(tx);
                     continue;
                 }
 
@@ -297,32 +303,81 @@ public class Client {
     }
 
     /**
-     * 
+     * Handles membership changes for the account
+     * Starts the client when enough clients have joined
+     * Also sets the client to sync mode and broadcasts a sync transaction when a new member joins
      * @param members
      */
     public void handleMemberShipChange(SpreadGroup[] members) {
         // If a member leaves the exection, update member list but otherwise ignore it.
+        if (this.members.length >= members.length) {
+            this.members = members;
+            return;
+        }
 
-        // If a member joins, update member list, call updateStartMode()
-        //
-        //  if we are not start_mode, assume that we need to sync with new client
-        //      set sync mode to true
-        //      and create and send new sync transaction, containing current balance and order_count (send as outstanding_collection for same format)
+        // Update members and check if we can start client
+        this.members = members;
+        if (start_mode) {
+            updateStartMode();
+            return;
+        }
+        
+        // We have received a new member and are not in start mode; assume we need to sync
+        sync_mode = true;
+
+        // Send out sync transaction, containing current balance and order_counter
+        Transaction syncTx = new Transaction();
+        syncTx.command = "sync " + balance + " " + order_counter;   // sync tx format: sync <balance> <order_counter>
+        syncTx.uniqueId = id + " " + order_counter++;
+
+        Collection<Transaction> syncTxCollection = new ArrayList<>();
+        syncTxCollection.add(syncTx);
+
+        try {
+            sendOutstanding(syncTxCollection);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
-     * 
-     * @param balance
+     * Handles the reception of a sync transaction
+     * If we are a new member (in start mode), we use the values to set balance and order_counter
+     * If we are an existing member, we use the values to check if we are syncronized
+     * Makes the client exit sync mode once enough sync transactions have been received
+     * @param tx - The sync transaction
      */
     private void handleSyncTx(Transaction tx) {
-        // TODO: handle what happens when received sync transaction
+        String[] commandParts = tx.command.split(" ");
+        double syncBalance = Double.parseDouble(commandParts[1]);
+        int syncOrderCounter = Integer.parseInt(commandParts[2]);
 
-        //             if we are in start_mode, update mode to sync upon reception
-        //                  and set current balance and order_counter
-        //
-        //              else, check if recevied balance is consistent. If not, exit
-        //
-        //          at end, check how many sync received. When enough (membersize-1): go out of sync mode     
+        // When in start mode we set the balance and order_counter, and change mode to sync_mode
+        if (start_mode) {
+            balance = syncBalance;
+            order_counter = syncOrderCounter;
+
+            sync_mode = true;
+            start_mode = false;
+            startClientLatch.countDown();   // Let main know we are no longer in start_mode
+
+        // When not in start mode, we are in sync mode (ARE WE ???)
+        } else {
+
+            // Check if the replias differ in balance and/or order_counter. If so, let user know and exit program.
+            if (balance != syncBalance || order_counter != syncOrderCounter) {
+                System.err.println("Fatal error: Balance and/or order counter differ between replicas, view is not consistent");
+                System.err.println("Expected balance '" + balance + "', but received '" + syncBalance);
+                System.err.println("Expected order_counter '" + order_counter + "', but received '" + syncOrderCounter);
+                exit();
+            }
+        }
+
+        // Check how many sync received. When enough (membersize-1): go out of sync mode 
+        if (++received_sync >= (members.length - 1)) {
+            received_sync = 0;
+            sync_mode = false;
+        }
     }
 
     /**
