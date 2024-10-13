@@ -99,8 +99,7 @@ public class Client {
      * @throws InterruptedException
      */
     public static void main(String[] args) throws InterruptedException {
-        // Temporary command line argument
-        // TODO: read arguments from command line
+        // Temporary command line arguments
         String server_address = "127.0.0.1";
         String account_name = "Group10";
         String file_name = "";
