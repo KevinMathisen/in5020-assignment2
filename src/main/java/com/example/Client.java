@@ -1,5 +1,8 @@
 package com.example;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -7,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -104,6 +108,30 @@ public class Client {
         boolean naive_sync_balance = false;
         int client_id = -1;
 
+        // Parse command-line arguments
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "--server":
+                    server_address = args[++i];  
+                    break;
+                case "--account":
+                    account_name = args[++i];    
+                    break;
+                case "--file":
+                    file_name = args[++i];      
+                    break;
+                case "--replicas":
+                    num_of_replica = Integer.parseInt(args[++i]);  
+                    break;
+                case "--naive":
+                    naive_sync_balance = true;   
+                    break;
+                default:
+                    System.out.println("Unknown argument: " + args[i]);
+                    break;
+            }
+        }
+
         // Could also read optional client id from command line
         if (client_id == -1) {
             Random rand = new Random();
@@ -123,7 +151,19 @@ public class Client {
         // Start broadcasting outstanding_collection every 10 seconds
         client.broadcastOutstanding();
 
-        // TODO: Start processing commands (either from file_name, or from commandline)
+        // Start processing commands (either from file_name, or from commandline)
+        if (!file_name.isEmpty()) {
+            // Process commands from the file
+            try {
+                client.processCommandsFromFile(file_name);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else {
+            // Process commands from the command line
+            client.processCommandsFromCommandLine();
+        }
+
         try {
             client.processCommand("deposit 100");
             client.processCommand("addInterest 10");
@@ -551,6 +591,34 @@ public class Client {
         if (start_mode && members.length == num_of_replica ) {
             this.start_mode = false;
             startClientLatch.countDown();
+        }
+    }
+
+    public void processCommandsFromFile(String fileName) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
+            String command;
+            while ((command = reader.readLine()) != null) {
+                processCommand(command);
+            }
+        } catch (IOException e) {
+            System.err.println("Error reading file: " + e.getMessage());
+        }
+    }
+    public void processCommandsFromCommandLine() {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Enter commands (type 'exit' to quit):");
+    
+        while (true) {
+            String command = scanner.nextLine();
+            if (command.equalsIgnoreCase("exit")) {
+                exit();
+                break;
+            }
+            try {
+                processCommand(command);
+            } catch (Exception e) {
+                System.err.println("Error processing command: " + e.getMessage());
+            }
         }
     }
 
