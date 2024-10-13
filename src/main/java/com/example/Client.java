@@ -100,25 +100,38 @@ public class Client {
         String server_address = "127.0.0.1";
         String account_name = "Group10";
         String file_name = "";
-        int num_of_replica = 1;
+        int num_of_replica = 2;
         boolean naive_sync_balance = false;
+        int client_id = -1;
+
+        // Could also read optional client id from command line
+        if (client_id == -1) {
+            Random rand = new Random();
+            client_id = rand.nextInt(Integer.MAX_VALUE)+1;
+        }
 
         // Initialize client
-        Random rand = new Random();
-        int client_id = rand.nextInt(Integer.MAX_VALUE)+1;
         Client client = new Client(client_id, server_address, account_name, file_name, num_of_replica, naive_sync_balance);
 
-        System.out.println("Created client with ID " + client_id + ", waiting for " + num_of_replica + " other clients to join group");
+        System.out.println("Created client with ID " + client_id + ", waiting for " + num_of_replica + " client(s) to join group");
         
         // Wait for all other clients to join before starting to process commands
         client.startClientLatch.await();
 
-        System.out.println("All members joined group, starting to synch and process commands");
+        System.out.println("All members joined group, starting to sync and process commands");
 
         // Start broadcasting outstanding_collection every 10 seconds
         client.broadcastOutstanding();
 
         // TODO: Start processing commands (either from file_name, or from commandline)
+        try {
+            client.processCommand("deposit 100");
+            client.processCommand("addInterest 10");
+            client.processCommand("getQuickBalance");
+            client.processCommand("getSyncedBalance");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
         Thread.sleep(100000000);
     }
@@ -128,7 +141,7 @@ public class Client {
      * @param command - The command to execute
      * @throws Exception
      */
-    private void processCommand(String command) throws Exception {
+    public void processCommand(String command) throws Exception {
         command = command.trim();
 
         // Check if command should have an argument
@@ -293,6 +306,9 @@ public class Client {
                 // Count deposit and addInterest transaction and save it to history
                 order_counter++;
                 executed_list.add(tx);
+
+                // For debugging
+                System.out.println("Executed transaction '" + tx.command + "' with id '" + tx.uniqueId + "', New balance is: " + balance);
             }
 
             // If outstanding_collection empty and are using navie sync balance, notify potential getSyncedBalance waiting for outstanding_collection to be empty
@@ -310,7 +326,7 @@ public class Client {
      */
     public void handleMemberShipChange(SpreadGroup[] members) {
         // If a member leaves the exection, update member list but otherwise ignore it.
-        if (this.members.length >= members.length) {
+        if (this.members != null && this.members.length >= members.length) {
             this.members = members;
             return;
         }
@@ -328,7 +344,7 @@ public class Client {
         // Send out sync transaction, containing current balance and order_counter
         Transaction syncTx = new Transaction();
         syncTx.command = "sync " + balance + " " + order_counter;   // sync tx format: sync <balance> <order_counter>
-        syncTx.uniqueId = id + " " + order_counter++;
+        syncTx.uniqueId = id + " " + outstanding_counter++;
 
         Collection<Transaction> syncTxCollection = new ArrayList<>();
         syncTxCollection.add(syncTx);
