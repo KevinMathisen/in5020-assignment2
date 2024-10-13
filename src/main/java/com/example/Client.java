@@ -238,7 +238,7 @@ public class Client {
      * Takes in transactions received from the spread server, and executed them if no problems are detected
      * Handles getSyncedBalance, setBalance, deposit, and addInterest
      * When a deposit or addInterest transaction is executed the order_counter is incremented and the transaction is saved to executed_list 
-     * Also notifies getSynchedBalance if outstanding_collection is empty when it is implemented as naive
+     * Also notifies getSyncedBalance if outstanding_collection is empty when it is implemented as naive
      * 
      * @param receivedTransactions - A collection containing transactions reveived from spread, which is executed in order of collection (which should be the same for all replicas??)
      */
