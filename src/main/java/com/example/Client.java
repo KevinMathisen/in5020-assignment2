@@ -291,7 +291,7 @@ public class Client {
                 boolean tx_already_executed = false;
                 for (Transaction executedTx : executed_list) {
                     if (executedTx.uniqueId.equals(tx.uniqueId)) {
-                        tx_already_executed = false;
+                        tx_already_executed = true;
                         break;
                     }
                 }
@@ -307,7 +307,9 @@ public class Client {
                 // If command is getSyncedBalance, print out the balance if the command was meant for this client
                 if (tx.command.equals("getSyncedBalance")) {
                     if (Integer.parseInt(tx.uniqueId.split(" ")[0]) == id) {
-                        System.out.println("Correct Synced Balance: " + balance);
+                        synchronized (this) {
+                            System.out.println("Correct Synced Balance: " + balance);
+                        }
                     }
                     continue;
                 }
@@ -340,7 +342,9 @@ public class Client {
                 executed_list.add(tx);
 
                 // For debugging
-                System.out.println("Executed transaction '" + tx.command + "' with id '" + tx.uniqueId + "', New balance is: " + balance);
+                synchronized (this) {
+                    System.out.println("Executed transaction '" + tx.command + "' with id '" + tx.uniqueId + "', New balance is: " + balance);
+                }
             }
 
             // If outstanding_collection empty and are using navie sync balance, notify potential getSyncedBalance waiting for outstanding_collection to be empty
@@ -374,8 +378,13 @@ public class Client {
         sync_mode = true;
 
         // Send out sync transaction, containing current balance and order_counter
+        
         Transaction syncTx = new Transaction();
-        syncTx.command = "sync " + balance + " " + order_counter;   // sync tx format: sync <balance> <order_counter>
+        double currentBalance = 0.0;
+        synchronized (this) {
+            currentBalance = balance;
+        }
+        syncTx.command = "sync " + currentBalance + " " + order_counter;   // sync tx format: sync <balance> <order_counter>
         syncTx.uniqueId = id + " " + outstanding_counter++;
 
         Collection<Transaction> syncTxCollection = new ArrayList<>();
@@ -402,23 +411,26 @@ public class Client {
 
         // When in start mode we set the balance and order_counter, and change mode to sync_mode
         if (start_mode) {
-            balance = syncBalance;
-            order_counter = syncOrderCounter;
-
-            sync_mode = true;
-            start_mode = false;
-            startClientLatch.countDown();   // Let main know we are no longer in start_mode
+            synchronized (this) {
+                balance = syncBalance;
+                order_counter = syncOrderCounter;
+                sync_mode = true;
+                start_mode = false;
+                startClientLatch.countDown();   // Let main know we are no longer in start_mode
+            }
 
         // When not in start mode, we are in sync mode (ARE WE ???)
         } else {
 
             // Check if the replias differ in balance and/or order_counter. If so, let user know and exit program.
-            if (balance != syncBalance || order_counter != syncOrderCounter) {
-                System.err.println("Fatal error: Balance and/or order counter differ between replicas, view is not consistent");
-                System.err.println("Expected balance '" + balance + "', but received '" + syncBalance);
-                System.err.println("Expected order_counter '" + order_counter + "', but received '" + syncOrderCounter);
-                exit();
-            }
+            synchronized (this) {
+                if (balance != syncBalance || order_counter != syncOrderCounter) {
+                    System.err.println("Fatal error: Balance and/or order counter differ between replicas, view is not consistent");
+                    System.err.println("Expected balance '" + balance + "', but received '" + syncBalance);
+                    System.err.println("Expected order_counter '" + order_counter + "', but received '" + syncOrderCounter);
+                    exit();
+                }
+            }   
         }
 
         // Check how many sync received. When enough (membersize-1): go out of sync mode 
@@ -432,7 +444,9 @@ public class Client {
      * Prints the balance immediately
      */
     private void getQuickBalance() {
-        System.out.println("Quick balance: " + balance);
+        synchronized (this) {
+            System.out.println("Quick balance: " + balance);   
+        }
     }
 
     /**
@@ -447,10 +461,12 @@ public class Client {
                     try {
                         outstanding_collection.wait();
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        Thread.currentThread().interrupt();
                     }
                 }
-                System.out.println("Naive Synced balance: " + balance);
+                synchronized (this) {
+                    System.out.println("Naive Synced balance: " + balance);
+                }
             }
         }).start();
     }
@@ -462,20 +478,26 @@ public class Client {
         // create a transaction 
         Transaction tx = new Transaction();
         tx.command = "getSyncedBalance";
-        tx.uniqueId = id + " " + outstanding_counter++;
+        int current_outstanding_counter = 0;
+        synchronized (this) {
+            current_outstanding_counter = outstanding_counter++;
+        }
+        tx.uniqueId = id + " " + current_outstanding_counter;
         
         // Add the transaction to outstanding collection to be broadcast
         synchronized (outstanding_collection) {
             outstanding_collection.add(tx);
         }
-}
+    }
 
     /**
      * Add given amount to the balance
      * @param amount - How much to add to the balance. Can be negative
      */
     private void deposit(double amount) {
-        balance += amount;
+        synchronized (this) {
+            balance += amount;
+        }
     }
 
     /**
@@ -483,7 +505,9 @@ public class Client {
      * @param percent - How much to interest (in percent) to add to the balance. Can be negative
      */
     private void addInterest(double percent) {
-        balance += balance * (percent / 100.0);
+        synchronized (this) {
+            balance += balance * (percent / 100.0);
+        }
     }
     
     /**
@@ -491,19 +515,21 @@ public class Client {
      * The transactions in executed_list are numbered based on order_counter
      */
     private void getHistory() {
-        System.out.println("History:");
-        // Calculate the starting index for numbering transactions
-        int startIndex = order_counter - executed_list.size() + 1;
-        int index = startIndex;
-    
-        System.out.println("Executed transactions:");
-        for (Transaction tx : executed_list) {
-            System.out.println(index++ + ". " + tx.command + " (ID: " + tx.uniqueId + ")");
-        }
-    
-        System.out.println("Outstanding transactions:");
-        for (Transaction tx : outstanding_collection) {
-            System.out.println(tx.command + " (ID: " + tx.uniqueId + ")"); // No numbering for outstanding transactions
+        synchronized (this) {
+            System.out.println("History:");
+            // Calculate the starting index for numbering transactions
+            int startIndex = order_counter - executed_list.size() + 1;
+            int index = startIndex;
+        
+            System.out.println("Executed transactions:");
+            for (Transaction tx : executed_list) {
+                System.out.println(index++ + ". " + tx.command + " (ID: " + tx.uniqueId + ")");
+            }
+        
+            System.out.println("Outstanding transactions:");
+            for (Transaction tx : outstanding_collection) {
+                System.out.println(tx.command + " (ID: " + tx.uniqueId + ")"); // No numbering for outstanding transactions
+            }
         }
     }
 
@@ -521,41 +547,47 @@ public class Client {
      * @return the status of the transaction
      */
     private String getTxStatus(String transactionId) {
-        // Check if transaction is in the executed list
-        for (Transaction transaction : executed_list) {
-            if (transaction.uniqueId.equals(transactionId)) {
-                return "Executed";
+        synchronized (this) {
+            // Check if transaction is in the executed list
+            for (Transaction transaction : executed_list) {
+                if (transaction.uniqueId.equals(transactionId)) {
+                    return "Executed";
+                }
             }
-        }
 
-        // Check if the transaction is in outstanding_collection 
-        for (Transaction transaction : outstanding_collection) {
-            if (transaction.uniqueId.equals(transactionId)) {
-                return "In queue";
+            // Check if the transaction is in outstanding_collection 
+            for (Transaction transaction : outstanding_collection) {
+                if (transaction.uniqueId.equals(transactionId)) {
+                    return "In queue";
+                }
             }
-        }
 
-        return "Not Found";
+            return "Not Found";
+        }
     }
     
     /**
      * Empty executed_list
      */
     private void cleanHistory() {
-        executed_list.clear();
+        synchronized (this) {
+            executed_list.clear();
+        }
     }
     
     /**
      * Prints the members to the user
      */
     private void memberInfo() {
-        System.out.println("Current members are:");
-        if (members != null) {
-            for (SpreadGroup member : members) {
-                System.out.println(member.toString()); // Print the member's name or a representative string
-            }
-        } else {
-            System.out.println("No members are currently connected.");
+        synchronized (this) {
+            System.out.println("Current members are:");
+            if (members != null) {
+                for (SpreadGroup member : members) {
+                    System.out.println(member.toString()); // Print the member's name or a representative string
+                }
+            } else {
+                System.out.println("No members are currently connected.");
+            }   
         }
     }
     
@@ -596,10 +628,13 @@ public class Client {
         // Only exit start mode if same amount of replicas and expected
         //      if too few: we need to wait for more to join, 
         //      if too many: means we need to sync and therefore wait for sync message
-        if (start_mode && members.length == num_of_replica ) {
-            this.start_mode = false;
-            startClientLatch.countDown();
+        synchronized (this) {
+            if (start_mode && members.length == num_of_replica ) {
+                this.start_mode = false;
+                startClientLatch.countDown();
+            }
         }
+        
     }
 
     public void processCommandsFromFile(String fileName) throws Exception {
