@@ -34,7 +34,7 @@ public class Listener implements AdvancedMessageListener {
         client.handleMemberShipChange(members);
 
         // For debugging 
-        System.out.println("New membership change: " + members);
+        // System.out.println("New membership change: " + members);
     }
 
 }

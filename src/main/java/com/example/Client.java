@@ -166,10 +166,10 @@ public class Client {
         }
 
         // For debugging
-        System.err.println("Finished executing all commands, waiting for 20 seconds then exiting");
-        Thread.sleep(20 * 1000);
-        System.out.println("Final balance is " + client.balance);
-        System.exit(0);
+        // System.err.println("Finished executing all commands, waiting for 60 seconds then exiting");
+        // Thread.sleep(60 * 1000);
+        // System.out.println("Final balance is " + client.balance);
+        // System.exit(0);
     }
 
     /**
@@ -392,7 +392,7 @@ public class Client {
             currentBalance = balance;
         }
         syncTx.command = "sync " + currentBalance + " " + order_counter;   // sync tx format: sync <balance> <order_counter>
-        syncTx.uniqueId = id + " " + outstanding_counter++;
+        syncTx.uniqueId = id + " " + "-1";   // Sync transaction ID will not be used, set it to <client_id> <-1> and do not increase outstanding_counter
 
         Collection<Transaction> syncTxCollection = new ArrayList<>();
         syncTxCollection.add(syncTx);

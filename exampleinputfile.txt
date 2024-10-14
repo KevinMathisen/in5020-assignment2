@@ -32,3 +32,4 @@ sleep 8
 getSyncedBalance
 getQuickBalance
 getHistory
+exit
