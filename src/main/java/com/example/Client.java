@@ -498,10 +498,20 @@ public class Client {
      * The transactions in executed_list are numbered based on order_counter
      */
     private void getHistory() {
-        // TODO: should print out history
-        //   transactions from executed list should be numbered from (order_counter-executed_list.length()) and up
-        //   transactions from outstanding should just be printed in order of when added (from index 0 and up)
-        System.out.println("History: ");
+        System.out.println("History:");
+        // Calculate the starting index for numbering transactions
+        int startIndex = order_counter - executed_list.size() + 1;
+        int index = startIndex;
+    
+        System.out.println("Executed transactions:");
+        for (Transaction tx : executed_list) {
+            System.out.println(index++ + ". " + tx.command + " (ID: " + tx.uniqueId + ")");
+        }
+    
+        System.out.println("Outstanding transactions:");
+        for (Transaction tx : outstanding_collection) {
+            System.out.println(tx.command + " (ID: " + tx.uniqueId + ")"); // No numbering for outstanding transactions
+        }
     }
 
     /**
@@ -546,8 +556,14 @@ public class Client {
      * Prints the members to the user
      */
     private void memberInfo() {
-        // TODO: Should print out members in string format
-        System.out.println("Current members are: ");
+        System.out.println("Current members are:");
+        if (members != null) {
+            for (SpreadGroup member : members) {
+                System.out.println(member.toString()); // Print the member's name or a representative string
+            }
+        } else {
+            System.out.println("No members are currently connected.");
+        }
     }
     
     /**
