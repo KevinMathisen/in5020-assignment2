@@ -163,15 +163,6 @@ public class Client {
             client.processCommandsFromCommandLine();
         }
 
-        try {
-            client.processCommand("deposit 100");
-            client.processCommand("addInterest 10");
-            client.processCommand("getQuickBalance");
-            client.processCommand("getSyncedBalance");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
         Thread.sleep(100000000);
     }
 
@@ -306,7 +297,9 @@ public class Client {
                 }
 
                 // If the transaction was local, remove it from the local list
-                outstanding_collection.removeIf(localTx -> localTx.uniqueId.equals(tx.uniqueId));
+                synchronized (outstanding_collection) {
+                    outstanding_collection.removeIf(localTx -> localTx.uniqueId.equals(tx.uniqueId));
+                }
 
                 // If transaction has already been executed, skip it
                 if (tx_already_executed) continue;
