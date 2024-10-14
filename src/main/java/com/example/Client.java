@@ -300,7 +300,7 @@ public class Client {
                 boolean tx_already_executed = false;
                 for (Transaction executedTx : executed_list) {
                     if (executedTx.uniqueId.equals(tx.uniqueId)) {
-                        tx_already_executed = false;
+                        tx_already_executed = true;
                         break;
                     }
                 }
@@ -597,7 +597,9 @@ public class Client {
         try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
             String command;
             while ((command = reader.readLine()) != null) {
+                double randomValue = 0.5 + (Math.random()); 
                 processCommand(command);
+                Thread.sleep((long) (randomValue * 1000));
             }
         } catch (IOException e) {
             System.err.println("Error reading file: " + e.getMessage());
