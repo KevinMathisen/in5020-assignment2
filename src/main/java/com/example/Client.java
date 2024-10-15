@@ -125,6 +125,8 @@ public class Client {
                 case "--naive":
                     naive_sync_balance = true;   
                     break;
+                case "--id":
+                    client_id = Integer.parseInt(args[++i]);
                 default:
                     System.out.println("Unknown argument: " + args[i]);
                     break;
@@ -163,7 +165,11 @@ public class Client {
             client.processCommandsFromCommandLine();
         }
 
-        Thread.sleep(100000000);
+        // For debugging
+        // System.err.println("Finished executing all commands, waiting for 60 seconds then exiting");
+        // Thread.sleep(60 * 1000);
+        // System.out.println("Final balance is " + client.balance);
+        // System.exit(0);
     }
 
     /**
@@ -172,11 +178,12 @@ public class Client {
      * @throws Exception
      */
     public void processCommand(String command) throws Exception {
+        // System.out.println("Processing command '" + command + " from user");
         command = command.trim();
 
         // Check if command should have an argument
         if (command.startsWith("deposit") || command.startsWith("addInterest") || command.startsWith("checkTxStatus") || command.startsWith("sleep")) {
-            if (command.split(" ").length != 2 ) {
+            if (command.split(" ").length != 2 && command.split(" ").length != 3) {
                 System.out.println("Invalid argument for command, should follow syntax '<command_name> <value>'");
                 return;
             }
@@ -194,7 +201,7 @@ public class Client {
 
             // Handle txstatus and sleep by calling their methods
             } else if (command.startsWith("checkTxStatus")) {
-                printTxStatus(command.split(" ")[1]);
+                printTxStatus(command.split(" ")[1]+" "+command.split(" ")[2]);
 
             } else if (command.startsWith("sleep")) {
                 sleep(Integer.parseInt(command.split(" ")[1]));
@@ -217,7 +224,7 @@ public class Client {
             case "getHistory" -> getHistory();
             case "cleanHistory" -> cleanHistory();
             case "memberInfo" -> memberInfo();
-            case "exit" -> exit();
+            case "exit" -> System.exit(0);
             default -> System.out.println("Invalid command");
         }
 
@@ -342,9 +349,9 @@ public class Client {
                 executed_list.add(tx);
 
                 // For debugging
-                synchronized (this) {
-                    System.out.println("Executed transaction '" + tx.command + "' with id '" + tx.uniqueId + "', New balance is: " + balance);
-                }
+                // synchronized (this) {
+                //     System.out.println("Executed transaction '" + tx.command + "' with id '" + tx.uniqueId + "', New balance is: " + balance);
+                // }
             }
 
             // If outstanding_collection empty and are using navie sync balance, notify potential getSyncedBalance waiting for outstanding_collection to be empty
@@ -385,7 +392,7 @@ public class Client {
             currentBalance = balance;
         }
         syncTx.command = "sync " + currentBalance + " " + order_counter;   // sync tx format: sync <balance> <order_counter>
-        syncTx.uniqueId = id + " " + outstanding_counter++;
+        syncTx.uniqueId = id + " " + "-1";   // Sync transaction ID will not be used, set it to <client_id> <-1> and do not increase outstanding_counter
 
         Collection<Transaction> syncTxCollection = new ArrayList<>();
         syncTxCollection.add(syncTx);
@@ -428,7 +435,7 @@ public class Client {
                     System.err.println("Fatal error: Balance and/or order counter differ between replicas, view is not consistent");
                     System.err.println("Expected balance '" + balance + "', but received '" + syncBalance);
                     System.err.println("Expected order_counter '" + order_counter + "', but received '" + syncOrderCounter);
-                    exit();
+                    System.exit(0);
                 }
             }   
         }
@@ -521,14 +528,14 @@ public class Client {
             int startIndex = order_counter - executed_list.size() + 1;
             int index = startIndex;
         
-            System.out.println("Executed transactions:");
+            System.out.println("\tExecuted transactions:");
             for (Transaction tx : executed_list) {
-                System.out.println(index++ + ". " + tx.command + " (ID: " + tx.uniqueId + ")");
+                System.out.println("\t\t" + index++ + ". " + tx.command);
             }
         
-            System.out.println("Outstanding transactions:");
+            System.out.println("\tOutstanding transactions:");
             for (Transaction tx : outstanding_collection) {
-                System.out.println(tx.command + " (ID: " + tx.uniqueId + ")"); // No numbering for outstanding transactions
+                System.out.println("\t\t" + tx.command); // No numbering for outstanding transactions
             }
         }
     }
@@ -548,6 +555,8 @@ public class Client {
      */
     private String getTxStatus(String transactionId) {
         synchronized (this) {
+            
+            
             // Check if transaction is in the executed list
             for (Transaction transaction : executed_list) {
                 if (transaction.uniqueId.equals(transactionId)) {
@@ -562,7 +571,7 @@ public class Client {
                 }
             }
 
-            return "Not Found";
+            return "Transaction with ID '" + transactionId + "' not found";
         }
     }
     
@@ -583,7 +592,7 @@ public class Client {
             System.out.println("Current members are:");
             if (members != null) {
                 for (SpreadGroup member : members) {
-                    System.out.println(member.toString()); // Print the member's name or a representative string
+                    System.out.println("\t" + member.toString()); // Print the member's name or a representative string
                 }
             } else {
                 System.out.println("No members are currently connected.");
@@ -607,18 +616,6 @@ public class Client {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-    }
-    
-    /**
-     * Disconnects from spread and exits the program
-     */
-    private void exit() {
-        try {
-            spread_connection.disconnect();
-        } catch (SpreadException e) {
-            e.printStackTrace();
-        }
-        System.exit(0);
     }
 
     /**
@@ -656,7 +653,7 @@ public class Client {
         while (true) {
             String command = scanner.nextLine();
             if (command.equalsIgnoreCase("exit")) {
-                exit();
+                System.exit(0);
                 break;
             }
             try {
