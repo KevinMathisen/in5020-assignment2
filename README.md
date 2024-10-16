@@ -61,3 +61,16 @@ When starting a client with other, already running clients, the new client will 
 However, if the new client has `num_of_rep` set at the same amount of group members, the new client will think it can start executing and is not a new member.
 This will cause the new client to exit as it detects it is not synchronized.
 To prevent this simply set `num_of_client` to be **less or more** than amount of member including the new member.
+
+### Difference between Naive and Correct getSyncedBalance command
+
+#### Naive implementation
+
+In the naive implementation, the getSyncedBalance command is only executed when the outstanding_collection of transactions is empty. This means that the client waits until all outstanding transactions have been broadcast to all other replicas and applied to the account's state before checking the synchronized balance. This approach is simple but can lead to potential deadlocks if the outstanding_collection never becomes empty, especially when new transactions are continuously added.
+
+#### Correct implementation
+
+In the correct implementation, the getSyncedBalance command itself is treated like a transaction and added to the outstanding_collection. However, there are two key differences:
+
+1. Selective Execution: When the getSyncedBalance transaction is received by other replicas, only the original client that sent the command executes the balance check.
+2. Removal Without Execution: Once the getSyncedBalance transaction is processed, it is removed from the outstanding_collection but is not added to the executed_list, ensures that it doesn’t impact future state changes.
