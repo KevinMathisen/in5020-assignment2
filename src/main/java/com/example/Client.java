@@ -224,7 +224,7 @@ public class Client {
             case "getHistory" -> getHistory();
             case "cleanHistory" -> cleanHistory();
             case "memberInfo" -> memberInfo();
-            case "exit" -> System.exit(0);
+            case "exit" -> exit_client();
             default -> System.out.println("Invalid command");
         }
 
@@ -356,7 +356,7 @@ public class Client {
 
             // If outstanding_collection empty and are using navie sync balance, notify potential getSyncedBalance waiting for outstanding_collection to be empty
             synchronized (outstanding_collection) {
-                if (outstanding_collection.isEmpty() && naive_sync_balance) outstanding_collection.notifyAll();
+                if (outstanding_collection.isEmpty()) outstanding_collection.notifyAll();
             }
         }
     }
@@ -435,7 +435,7 @@ public class Client {
                     System.err.println("Fatal error: Balance and/or order counter differ between replicas, view is not consistent");
                     System.err.println("Expected balance '" + balance + "', but received '" + syncBalance);
                     System.err.println("Expected order_counter '" + order_counter + "', but received '" + syncOrderCounter);
-                    System.exit(0);
+                    exit_client();
                 }
             }   
         }
@@ -653,7 +653,7 @@ public class Client {
         while (true) {
             String command = scanner.nextLine();
             if (command.equalsIgnoreCase("exit")) {
-                System.exit(0);
+                exit_client();
                 break;
             }
             try {
@@ -662,6 +662,29 @@ public class Client {
                 System.err.println("Error processing command: " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Exit the client after all transactions in outstanding_collection has been executed
+     */
+    private void exit_client() {
+        new Thread(() -> {
+            synchronized (outstanding_collection) {
+                while (!outstanding_collection.isEmpty()) {
+                    try {
+                        outstanding_collection.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                // Exit system when outstanding_collection is empty
+                synchronized (this) {
+                    System.exit(0);
+                }
+            }
+        }).start();
+        
+        
     }
 
 }
