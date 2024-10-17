@@ -32,7 +32,7 @@ public class Client {
     private final Listener spread_listener;             // Used to receive messages
     private final SpreadGroup spread_group;             // Group for account
 
-    private final int id;                           // Unique ID of the client
+    private final String id;                           // Unique ID of the client
     public boolean start_mode;                  // If the client is starting up
     public boolean sync_mode;                      // If the client is currently syncronising
     private int received_sync;                      // Amount of received sync messages since last sync
@@ -56,7 +56,7 @@ public class Client {
      * @param naive_sync_balance    - If naive mode should be used when running the command getSyncedBalance 
      * @throws InterruptedException
      */
-    public Client(int id, String server_address, String account_name, String file_name, int num_of_replica, boolean naive_sync_balance) throws InterruptedException {
+    public Client(String id, String server_address, String account_name, String file_name, int num_of_replica, boolean naive_sync_balance) throws InterruptedException {
         // Initialize to 0 and empty lists
         this.balance = 0.0;
         this.order_counter = 0;
@@ -105,7 +105,7 @@ public class Client {
         String file_name = "";
         int num_of_replica = 2;
         boolean naive_sync_balance = false;
-        int client_id = -1;
+        String client_id = "-1";
 
         // Parse command-line arguments
         for (int i = 0; i < args.length; i++) {
@@ -126,7 +126,7 @@ public class Client {
                     naive_sync_balance = true;   
                     break;
                 case "--id":
-                    client_id = Integer.parseInt(args[++i]);
+                    client_id = args[++i];
                 default:
                     System.out.println("Unknown argument: " + args[i]);
                     break;
@@ -134,9 +134,9 @@ public class Client {
         }
 
         // Could also read optional client id from command line
-        if (client_id == -1) {
+        if (client_id == "-1") {
             Random rand = new Random();
-            client_id = rand.nextInt(Integer.MAX_VALUE)+1;
+            client_id = String.valueOf(rand.nextInt(Integer.MAX_VALUE) + 1);
         }
 
         // Initialize client
@@ -313,7 +313,7 @@ public class Client {
 
                 // If command is getSyncedBalance, print out the balance if the command was meant for this client
                 if (tx.command.equals("getSyncedBalance")) {
-                    if (Integer.parseInt(tx.uniqueId.split(" ")[0]) == id) {
+                    if (tx.uniqueId.split(" ")[0].equals(id)) {
                         synchronized (this) {
                             System.out.println("Correct Synced Balance: " + balance);
                         }
@@ -639,8 +639,8 @@ public class Client {
             String command;
             while ((command = reader.readLine()) != null) {
                 double randomValue = 0.5 + (Math.random()); 
-                processCommand(command);
                 Thread.sleep((long) (randomValue * 1000));
+                processCommand(command);
             }
         } catch (IOException e) {
             System.err.println("Error reading file: " + e.getMessage());
