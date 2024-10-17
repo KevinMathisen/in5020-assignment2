@@ -1,0 +1,39 @@
+memberInfo
+getSyncedBalance
+getQuickBalance
+deposit 100
+checkTxStatus Rep1 0
+getSyncedBalance
+getQuickBalance
+deposit 100
+getQuickBalance
+sleep 6
+getSyncedBalance
+addInterest 10
+getSyncedBalance
+deposit 100
+deposit 50
+deposit 40
+deposit 30
+deposit 20
+deposit 10
+addInterest 10
+sleep 7
+getSyncedBalance
+getQuickBalance
+deposit 100
+deposit 100
+addInterest 20
+checkTxStatus Rep1 11
+memberInfo
+getHistory
+cleanHistory
+deposit 100
+sleep 8
+getSyncedBalance
+getQuickBalance
+sleep 30
+getSyncedBalance
+getQuickBalance
+getHistory
+exit
