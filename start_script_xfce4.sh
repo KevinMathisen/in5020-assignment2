@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set where to start the java files from
-WORK_DIR="./"
+WORK_DIR="./Users/an-nhu.le/in5020Assignment2/in5020-assignment2"
 
 # Run Rep1
 xfce4-terminal --hold --working-directory="$WORK_DIR" --command="java -cp target/assignment2-1.0-SNAPSHOT.jar:lib/spread.jar com.example.Client --server 127.0.0.1 --account Group10 --file Rep1.txt --replicas 2 --id Rep1"

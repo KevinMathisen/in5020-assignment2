@@ -32,7 +32,7 @@ public class Client {
     private final Listener spread_listener;             // Used to receive messages
     private final SpreadGroup spread_group;             // Group for account
 
-    private final String id;                           // Unique ID of the client
+    private final int id;                           // Unique ID of the client
     public boolean start_mode;                  // If the client is starting up
     public boolean sync_mode;                      // If the client is currently syncronising
     private int received_sync;                      // Amount of received sync messages since last sync
@@ -56,7 +56,7 @@ public class Client {
      * @param naive_sync_balance    - If naive mode should be used when running the command getSyncedBalance 
      * @throws InterruptedException
      */
-    public Client(String id, String server_address, String account_name, String file_name, int num_of_replica, boolean naive_sync_balance) throws InterruptedException {
+    public Client(int id, String server_address, String account_name, String file_name, int num_of_replica, boolean naive_sync_balance) throws InterruptedException {
         // Initialize to 0 and empty lists
         this.balance = 0.0;
         this.order_counter = 0;
@@ -105,7 +105,7 @@ public class Client {
         String file_name = "";
         int num_of_replica = 2;
         boolean naive_sync_balance = false;
-        String client_id = "-1";
+        int client_id = -1;
 
         // Parse command-line arguments
         for (int i = 0; i < args.length; i++) {
@@ -126,7 +126,7 @@ public class Client {
                     naive_sync_balance = true;   
                     break;
                 case "--id":
-                    client_id = args[++i];
+                    client_id = Integer.parseInt(args[++i]);
                 default:
                     System.out.println("Unknown argument: " + args[i]);
                     break;
@@ -134,9 +134,9 @@ public class Client {
         }
 
         // Could also read optional client id from command line
-        if (client_id == "-1") {
+        if (client_id == -1) {
             Random rand = new Random();
-            client_id = String.valueOf(rand.nextInt(Integer.MAX_VALUE) + 1);
+            client_id = rand.nextInt(Integer.MAX_VALUE)+1;
         }
 
         // Initialize client
@@ -224,7 +224,7 @@ public class Client {
             case "getHistory" -> getHistory();
             case "cleanHistory" -> cleanHistory();
             case "memberInfo" -> memberInfo();
-            case "exit" -> exit_client();
+            case "exit" -> System.exit(0);
             default -> System.out.println("Invalid command");
         }
 
@@ -313,7 +313,7 @@ public class Client {
 
                 // If command is getSyncedBalance, print out the balance if the command was meant for this client
                 if (tx.command.equals("getSyncedBalance")) {
-                    if (tx.uniqueId.split(" ")[0].equals(id)) {
+                    if (Integer.parseInt(tx.uniqueId.split(" ")[0]) == id) {
                         synchronized (this) {
                             System.out.println("Correct Synced Balance: " + balance);
                         }
@@ -356,7 +356,7 @@ public class Client {
 
             // If outstanding_collection empty and are using navie sync balance, notify potential getSyncedBalance waiting for outstanding_collection to be empty
             synchronized (outstanding_collection) {
-                if (outstanding_collection.isEmpty()) outstanding_collection.notifyAll();
+                if (outstanding_collection.isEmpty() && naive_sync_balance) outstanding_collection.notifyAll();
             }
         }
     }
@@ -435,7 +435,7 @@ public class Client {
                     System.err.println("Fatal error: Balance and/or order counter differ between replicas, view is not consistent");
                     System.err.println("Expected balance '" + balance + "', but received '" + syncBalance);
                     System.err.println("Expected order_counter '" + order_counter + "', but received '" + syncOrderCounter);
-                    exit_client();
+                    System.exit(0);
                 }
             }   
         }
@@ -633,12 +633,19 @@ public class Client {
         }
         
     }
-
+    /**
+     * Reads commands from file and processes them one by one.
+     * Each command is processed after a random delay of 0.5 to 1.5 seconds.
+     * @param fileName The name of the file containing commands to process.
+     */
     public void processCommandsFromFile(String fileName) throws Exception {
         try (BufferedReader reader = new BufferedReader(new FileReader(fileName))) {
             String command;
+            // Read each line from the file until the end of the file is reached
             while ((command = reader.readLine()) != null) {
+                // Generate a random delay between 0.5 and 1.5 seconds
                 double randomValue = 0.5 + (Math.random()); 
+                // Pause the thread for the random delay time
                 Thread.sleep((long) (randomValue * 1000));
                 processCommand(command);
             }
@@ -646,14 +653,22 @@ public class Client {
             System.err.println("Error reading file: " + e.getMessage());
         }
     }
+
+    /**
+     * Reads and processes commands entered by the user from the command line.
+     * The user can enter commands interactively, and they will be processed immediately.
+     * The user can type 'exit' to terminate the program.
+     */
     public void processCommandsFromCommandLine() {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Enter commands (type 'exit' to quit):");
     
         while (true) {
+            // Read the command from the command line
             String command = scanner.nextLine();
+            // If the user types 'exit', terminate the program
             if (command.equalsIgnoreCase("exit")) {
-                exit_client();
+                System.exit(0);
                 break;
             }
             try {
@@ -662,29 +677,6 @@ public class Client {
                 System.err.println("Error processing command: " + e.getMessage());
             }
         }
-    }
-
-    /**
-     * Exit the client after all transactions in outstanding_collection has been executed
-     */
-    private void exit_client() {
-        new Thread(() -> {
-            synchronized (outstanding_collection) {
-                while (!outstanding_collection.isEmpty()) {
-                    try {
-                        outstanding_collection.wait();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-                // Exit system when outstanding_collection is empty
-                synchronized (this) {
-                    System.exit(0);
-                }
-            }
-        }).start();
-        
-        
     }
 
 }
